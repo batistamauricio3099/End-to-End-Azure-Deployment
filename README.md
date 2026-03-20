@@ -1,5 +1,7 @@
 # Azure Infrastructure Automation: Bicep & CI/CD Blueprint
 
+<img width="1908" height="738" alt="diagram-export-21-3-2026-6_54_56-a m" src="https://github.com/user-attachments/assets/2d19c095-a296-4bd4-8dda-a5a21a8c0561" />
+
 This repository contains a **production-ready infrastructure-as-code (IaC) solution** for deploying secure and scalable resources on Microsoft Azure. It demonstrates best practices in automation, security hardening, and multi-stage CI/CD pipelines.
 
 ## 🚀 Overview
