@@ -1,0 +1,7 @@
+# Ignorar archivos compilados de ARM
+*.json
+!azuredeploy.json
+
+# Ignorar parámetros con secretos
+*.local.bicepparam
+secrets.sh

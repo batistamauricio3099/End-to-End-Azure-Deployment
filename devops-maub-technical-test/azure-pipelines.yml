@@ -1,0 +1,72 @@
+trigger:
+- main
+
+variables:
+  - group: maub-global-vars
+  - name: resourceGroup
+    value: 'rg-maub-technical-test'
+  - name: location
+    value: 'eastus'
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+- stage: Deploy_Infrastructure
+  jobs:
+  - job: Bicep_and_Scripts
+    steps:
+    
+    # Deploy Infra with Bicep template
+    - task: AzureResourceManagerTemplateDeployment@3
+      name: bicepDeploy
+      displayName: 'Deploy Infra (Bicep)'
+      inputs:
+        deploymentScope: 'Resource Group'
+        azureResourceManagerConnection: 'Arroyo_Challenge-Test_MauricioBatista'
+        resourceGroupName: $(resourceGroup)
+        location: $(location)
+        csmFile: 'src/main.bicep'
+        csmParametersFile: 'src/main.bicepparam'
+        overrideParameters: '-principalId $(principalId)'
+        deploymentMode: 'Incremental'
+
+    # Script to get Storage Account Connection String and store in Key Vault
+    - task: AzureCLI@2
+      displayName: 'Set Connection String'
+      inputs:
+        azureSubscription: 'Arroyo_Challenge-Test_MauricioBatista'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "Debug: Checking Bicep Outputs..." >&2
+          
+          KV_NAME=$(echo "$BICEP_OUT" | jq -r '.keyVaultName.value // empty')
+          STG_NAME=$(echo "$BICEP_OUT" | jq -r '.storageAccountName.value // empty')
+
+          # If outputs are empty, try to find resources by name pattern in the Resource Group
+          if [[ -z "$KV_NAME" || -z "$STG_NAME" ]]; then
+            echo "Warning: Bicep outputs empty. Fetching resources from Resource Group directly..." >&2
+            
+            # Look for Key Vault that contains 'maub' in the name
+            KV_NAME=$(az keyvault list --resource-group "$(resourceGroup)" --query "[?contains(name, 'maub')].name" -o tsv | head -n 1)
+            
+            # Look for Storage Account that contains 'maub' in the name
+            STG_NAME=$(az storage account list --resource-group "$(resourceGroup)" --query "[?contains(name, 'maub')].name" -o tsv | head -n 1)
+          fi
+
+          if [[ -z "$KV_NAME" || -z "$STG_NAME" ]]; then
+            echo "Error: Could not find Key Vault or Storage Account in $(resourceGroup)." >&2
+            exit 1
+          fi
+
+          echo "Using Key Vault: $KV_NAME" >&2
+          echo "Using Storage Account: $STG_NAME" >&2
+
+          chmod +x src/get-storage-conn.sh
+          chmod +x src/set-secret-kv.sh
+
+          CONNECTION_STRING=$(./src/get-storage-conn.sh "$(resourceGroup)" "$STG_NAME")
+          ./src/set-secret-kv.sh "$KV_NAME" "storage-connection-string" "$CONNECTION_STRING"
+      env:
+        BICEP_OUT: $(bicepDeploy.deploymentOutputs)
